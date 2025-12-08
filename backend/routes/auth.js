@@ -1,22 +1,56 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Session from "../models/Session.js";
 
 const router = express.Router();
+const { Types } = mongoose;
+
+// Helper: load user through session using aggregation (fast & clean)
+async function getUserFromSession(sessionId) {
+    if (!sessionId) return null;
+
+    const data = await Session.aggregate([
+        { $match: { _id: new Types.ObjectId(sessionId) } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "user"
+            }
+        },
+        { $unwind: "$user" },
+        {
+            $project: {
+                password: 0,
+                "user.password": 0
+            }
+        }
+    ]);
+
+    return data.length ? data[0].user : null;
+}
 
 // Signup
 router.post("/signup", async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
-        console.log("Signup attempt:", email, username);
+        // Check collisions using one aggregation instead of two separate queries
+        const matches = await User.aggregate([
+            {
+                $match: {
+                    $or: [{ email }, { username }]
+                }
+            }
+        ]);
 
-        const existingEmailUser = await User.findOne({ email });
-        const existingUsernameUser = await User.findOne({ username });
+        const existingEmailUser = matches.find(u => u.email === email);
+        const existingUsernameUser = matches.find(u => u.username === username);
 
-        // ❌ Username is already taken by someone else
         if (existingUsernameUser && existingUsernameUser.email !== email) {
             return res.status(400).json({
                 success: false,
@@ -24,18 +58,14 @@ router.post("/signup", async (req, res) => {
             });
         }
 
-        // 🔐 Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 🔢 Generate verification code and expiry
+        // Generate verification code
         const verifycode = crypto.randomInt(100000, 999999).toString();
-        const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + 1);
+        const expiry = new Date(Date.now() + 60 * 60 * 1000);
 
         let savedUser;
 
-        // ✏️ If user already exists by email
         if (existingEmailUser) {
             if (existingEmailUser.isVerified) {
                 return res.status(400).json({
@@ -44,7 +74,6 @@ router.post("/signup", async (req, res) => {
                 });
             }
 
-            // 🔄 Update unverified user
             savedUser = await User.findOneAndUpdate(
                 { email },
                 {
@@ -53,39 +82,30 @@ router.post("/signup", async (req, res) => {
                         password: hashedPassword,
                         isVerified: false,
                         verifycode,
-                        verifycodeexpire: expiryDate,
-                    },
+                        verifycodeexpire: expiry
+                    }
                 },
                 { new: true }
             );
         } else {
-            // 🆕 Create new user
-            const newUser = new User({
+            savedUser = await User.create({
                 username,
                 email,
                 password: hashedPassword,
                 isVerified: false,
                 verifycode,
-                verifycodeexpire: expiryDate,
+                verifycodeexpire: expiry
             });
-
-            savedUser = await newUser.save();
         }
-
-        // TODO: Send verification email with verifycode here
 
         res.json({
             success: true,
             message: "User registered. Verification code sent.",
-            userId: savedUser._id,
+            userId: savedUser._id
         });
-
-    } catch (error) {
-        console.error("Error in registration:", error);
-        res.status(500).json({
-            success: false,
-            message: "Something went wrong"
-        });
+    } catch (err) {
+        console.error("Signup error:", err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
@@ -93,13 +113,15 @@ router.post("/signup", async (req, res) => {
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
-        console.log("Login attempt:", email);
 
-        const user = await User.findOne({ email });
+        // Load user using aggregation (only one DB operation)
+        const result = await User.aggregate([
+            { $match: { email } },
+            { $limit: 1 }
+        ]);
 
+        const user = result[0];
         if (!user) {
-            console.log("User not found for email:", email);
-            
             return res.status(400).json({
                 success: false,
                 message: "Invalid credentials"
@@ -108,26 +130,15 @@ router.post("/login", async (req, res) => {
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            console.log("Invalid password for email:", email);
-            
             return res.status(400).json({
                 success: false,
                 message: "Invalid credentials"
             });
         }
 
-        // Check if user is verified
-        // if (!user.isVerified) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: "Please verify your email first"
-        //     });
-        // }
-
-        // Create session
         const session = await Session.create({
             userId: user._id,
-            expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 5) // 2 hours
+            expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 2)
         });
 
         res.cookie("sessionId", session._id.toString(), {
@@ -146,13 +157,9 @@ router.post("/login", async (req, res) => {
                 email: user.email
             }
         });
-
-    } catch (error) {
-        console.error("Login error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
+    } catch (err) {
+        console.error("Login error:", err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
@@ -166,71 +173,38 @@ router.post("/logout", async (req, res) => {
         }
 
         res.clearCookie("sessionId");
-        res.json({
-            success: true,
-            message: "Logged out"
-        });
-    } catch (error) {
-        console.error("Logout error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
+        res.json({ success: true, message: "Logged out" });
+    } catch (err) {
+        console.error("Logout error:", err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
-// Who am I
+// Me (session → user via aggregation)
 router.get("/me", async (req, res) => {
     try {
         const sessionId = req.cookies.sessionId;
-
-        console.log("Me endpoint called");
-
         if (!sessionId) {
-            console.log("No sessionId cookie found");
-            
-            return res.json({
-                success: false,
-                user: null
-            });
+            return res.json({ success: false, user: null });
         }
 
-        const session = await Session.findById(sessionId);
-        if (!session) {
-            console.log("Session not found for sessionId:", sessionId);
-            
-            res.clearCookie("sessionId");
-            return res.json({
-                success: false,
-                user: null
-            });
-        }
+        const sessionDoc = await Session.findById(sessionId);
 
-        // Check if session expired
-        if (session.expiresAt < new Date()) {
+        if (!sessionDoc || sessionDoc.expiresAt < new Date()) {
             await Session.findByIdAndDelete(sessionId);
             res.clearCookie("sessionId");
-            console.log("Session expired for sessionId:", sessionId);
-            
-            return res.json({
-                success: false,
-                user: null
-            });
+            return res.json({ success: false, user: null });
         }
 
-        const user = await User.findById(session.userId).select("-password");
-        console.log("Authenticated user:", user);
-        
+        const user = await getUserFromSession(sessionId);
+
         res.json({
             success: true,
-            user: user
+            user
         });
-    } catch (error) {
-        console.error("Me endpoint error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
+    } catch (err) {
+        console.error("Me error:", err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
@@ -261,13 +235,9 @@ router.post("/verify-email", async (req, res) => {
             success: true,
             message: "Email verified successfully"
         });
-
-    } catch (error) {
-        console.error("Verification error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
+    } catch (err) {
+        console.error("Verify error:", err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
