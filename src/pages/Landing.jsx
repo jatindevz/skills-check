@@ -49,12 +49,12 @@ export default function Landing() {
                         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">SkillCheck</h1>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <button className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">
+                        <a className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200" href="#features">
                             Features
-                        </button>
-                        <button className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">
+                        </a>
+                        <a className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200" href="#how-it-works">
                             How it Works
-                        </button>
+                        </a>
                         <button className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5">
                             Get Started
                         </button>
@@ -109,7 +109,7 @@ export default function Landing() {
             </section>
 
             {/* Enhanced How It Works */}
-            <section className="py-20 bg-white">
+            <section className="py-20 bg-white scroll-mt-24" id="how-it-works" >
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="text-center mb-16">
                         <h2 className="text-4xl font-bold mb-4">How SkillCheck Works</h2>
@@ -144,7 +144,7 @@ export default function Landing() {
             </section>
 
             {/* Enhanced Features */}
-            <section className="py-20 bg-gradient-to-br from-blue-50 to-purple-50">
+            <section className="py-20 bg-gradient-to-br from-blue-50 to-purple-50 scroll-mt-24" id="features">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="text-center mb-16">
                         <h2 className="text-4xl font-bold mb-4">Powerful Features</h2>
