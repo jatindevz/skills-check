@@ -6,6 +6,11 @@ export default function Landing() {
 
     const navigate = useNavigate()
 
+    const GotoLogin = async() => {
+            navigate('/auth');
+
+    }
+
 
     useEffect(() => {
         document.title = "SkillFlow — Learn Smarter";
@@ -49,20 +54,19 @@ export default function Landing() {
                         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">SkillCheck</h1>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <a className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200" href="#features">
-                            Features
-                        </a>
                         <a className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200" href="#how-it-works">
                             How it Works
                         </a>
-                        <button className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5">
+                        <a className="px-5 py-2.5 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200" href="#features">
+                            Features
+                        </a>
+                        <button className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer " onClick={GotoLogin}>
                             Get Started
                         </button>
                     </div>
                 </div>
             </nav>
 
-            {/* Enhanced Hero Section */}
             <section className="max-w-7xl mx-auto px-6 py-24">
                 <div className="text-center space-y-8">
                     <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-4">
